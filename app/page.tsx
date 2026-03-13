@@ -1,7 +1,8 @@
 import { DepoimentsMarquee } from "@/components/custom/depoiments-marquee";
+import { ResumeEvaluator } from "@/components/custom/resume-evaluator";
 import { LightRays } from "@/components/ui/light-rays";
-import { ArrowRightIcon, CheckIcon, FolderOpenIcon, LockIcon } from "lucide-react";
-import Image from "next/image";
+import { NumberTicker } from "@/components/ui/number-ticker";
+import { ArrowRightIcon, CheckIcon, LockIcon } from "lucide-react";
 import Link from "next/link";
 
 export default function Page() {
@@ -20,7 +21,7 @@ export default function Page() {
           </button>
         </div>
       </header>
-      <section className="relative z-10 w-full max-w-7xl mx-auto py-8 lg:py-0 min-h-screen flex flex-col lg:flex-row items-center justify-center gap-8 px-4">
+      <section className="relative z-10 w-full max-w-7xl mx-auto py-8 lg:py-0 h-auto lg:h-screen flex flex-col lg:flex-row items-center justify-center gap-8 px-4">
         <div className="w-full flex flex-col gap-6">
           <div className="bg-lime-300/15 text-lime-300 border border-lime-300/20 text-sm font-semibold px-4 py-2 w-fit rounded-full">IA + ANÁLISE ATS</div>
           <h2 className="text-5xl font-black leading-14">
@@ -41,28 +42,26 @@ export default function Page() {
           <DepoimentsMarquee />
         </div>
       </section>
-      <section id="input-cv" className="relative z-10 w-full max-w-7xl mx-auto flex flex-col items-center justify-center gap-8 px-4 mb-50">
+      <section className="relative z-10 w-full max-w-7xl mx-auto flex flex-col items-center justify-center gap-8 px-4 py-10">
+        <div className="flex items-center">
+          <span className="text-6xl">+</span>
+          <NumberTicker
+            value={27}
+            className="text-8xl font-medium tracking-tighter whitespace-pre-wrap text-zinc-50"
+          />
+        </div>
+      </section>
+      <section id="input-cv" className="relative z-10 w-full max-w-7xl mx-auto flex flex-col items-center justify-center gap-8 px-4 py-25 mb-50">
         <div className="text-center">
           <p className="text-sm text-lime-300 font-bold tracking-wider mb-2">COMECE AGORA</p>
           <h2 className="text-3xl font-bold mb-4">Análise seu currículo gratuitamente</h2>
           <div className="flex items-center justify-center gap-2">
             <div className="bg-zinc-900/50 text-zinc-400 font-semibold border border-zinc-800/70 text-xs px-4 py-2 w-fit rounded-full tracking-wider">PDF</div>
             <div className="bg-zinc-900/50 text-zinc-400 font-semibold border border-zinc-800/70 text-xs px-4 py-2 w-fit rounded-full tracking-wider">DOCX</div>
-            <div className="bg-zinc-900/50 text-zinc-400 font-semibold border border-zinc-800/70 text-xs px-4 py-2 w-fit rounded-full tracking-wider">DOC</div>
           </div>
         </div>
-        <div className="w-full max-w-200 border border-dashed border-lime-300/30 rounded-lg bg-zinc-900/20 px-6 py-10 flex flex-col items-center justify-center gap-6">
-          <Image src="/candidato.png" alt="Candidato Icone" width={100} height={100} />
-          <div className="text-center">
-            <p className="text-2xl font-semibold mb-2">Arraste seu currículo aqui</p>
-            <p className="text-sm text-zinc-400">Ou clique para selecionar um arquivo</p>
-          </div>
-          <button className="border border-lime-300/50 text-lime-300 font-semibold px-4 py-2 rounded-lg flex items-center gap-2 cursor-pointer w-fit transition-all ease-in-out duration-300 hover:bg-lime-300 hover:text-zinc-950">
-            Selecionar arquivo
-            <FolderOpenIcon size={18} />
-          </button>
-        </div>
-        <p className="text-sm text-zinc-400 flex items-center gap-2"><LockIcon size={16} /> Seus dados são usados apenas para análise e descartados após 24h</p>
+        <ResumeEvaluator />
+        <p className="text-sm text-zinc-400 flex items-center gap-2"><LockIcon size={16} /> Seus dados não são armazenados e são utilizados apenas durante a análise</p>
       </section>
 
       <LightRays />

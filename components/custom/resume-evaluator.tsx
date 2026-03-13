@@ -51,6 +51,7 @@ export function ResumeEvaluator() {
   const abortRef = useRef<AbortController | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isPayLoading, setIsPayLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [evaluation, setEvaluation] = useState<ResumeEvaluation | null>(null);
@@ -434,6 +435,8 @@ export function ResumeEvaluator() {
                     <button
                       type="button"
                       onClick={async () => {
+                        if (isPayLoading) return;
+                        setIsPayLoading(true);
                         try {
                           // If user already has credits, unlock without payment.
                           if (typeof creditsBalance === "number" && creditsBalance > 0) {
@@ -451,6 +454,7 @@ export function ResumeEvaluator() {
                             setAnalysis(data.analysis);
                             setPremium(data.premium);
                             setCreditsBalance(data.credits.balance);
+                            setIsPayLoading(false);
                             return;
                           }
 
@@ -470,13 +474,22 @@ export function ResumeEvaluator() {
                           window.location.href = checkout.initPoint;
                         } catch (err) {
                           setError(err instanceof Error ? err.message : "Erro inesperado.");
+                          setIsPayLoading(false);
                         }
                       }}
-                      className="bg-lime-300 text-zinc-950 font-bold px-4 py-2 rounded-lg hover:cursor-pointer"
+                      disabled={isPayLoading}
+                      className="bg-lime-300 text-zinc-950 font-bold px-4 py-2 rounded-lg inline-flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
                     >
-                      {typeof creditsBalance === "number" && creditsBalance > 0
-                        ? "Desbloquear agora"
-                        : "Desbloquear por R$ 7,90"}
+                      {isPayLoading ? (
+                        <>
+                          Carregando...
+                          <Loader2Icon className="animate-spin" size={18} />
+                        </>
+                      ) : typeof creditsBalance === "number" && creditsBalance > 0 ? (
+                        "Desbloquear agora"
+                      ) : (
+                        "Desbloquear por R$ 7,90"
+                      )}
                     </button>
                   </div>
                 </div>

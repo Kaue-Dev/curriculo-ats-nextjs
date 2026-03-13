@@ -221,6 +221,25 @@ export function ResumeEvaluator() {
 
     async function loadLatest() {
       try {
+        // If user returned from Mercado Pago, refresh credits and try to unlock.
+        const mpStatus = new URLSearchParams(window.location.search).get("mp");
+        if (mpStatus === "success") {
+          const creditsRes = await fetch("/api/credits", {
+            method: "GET",
+            headers: showAdmin && adminToken ? { "x-admin-token": adminToken } : undefined,
+          });
+          if (creditsRes.ok) {
+            const creditsJson = (await creditsRes.json()) as { success: true; balance: number };
+            if (isMounted) setCreditsBalance(creditsJson.balance);
+          }
+
+          // Try unlock latest (will return 402 if still no credits)
+          await fetch("/api/resume/unlock-latest", {
+            method: "POST",
+            headers: showAdmin && adminToken ? { "x-admin-token": adminToken } : undefined,
+          }).catch(() => {});
+        }
+
         const res = await fetch("/api/resume/latest", {
           method: "GET",
           headers: showAdmin && adminToken ? { "x-admin-token": adminToken } : undefined,
@@ -414,12 +433,50 @@ export function ResumeEvaluator() {
                     </p>
                     <button
                       type="button"
-                      onClick={() => {
-                        alert("Em breve: desbloqueio via pagamento.");
+                      onClick={async () => {
+                        try {
+                          // If user already has credits, unlock without payment.
+                          if (typeof creditsBalance === "number" && creditsBalance > 0) {
+                            const res = await fetch("/api/resume/unlock-latest", {
+                              method: "POST",
+                              headers:
+                                showAdmin && adminToken ? { "x-admin-token": adminToken } : undefined,
+                            });
+                            const data = (await res.json()) as ApiSuccess | ApiError;
+                            if (!res.ok) {
+                              throw new Error("error" in data ? data.error : "Falha ao desbloquear.");
+                            }
+                            if (!("success" in data) || !data.success) throw new Error("Falha ao desbloquear.");
+                            setEvaluation(data.evaluation);
+                            setAnalysis(data.analysis);
+                            setPremium(data.premium);
+                            setCreditsBalance(data.credits.balance);
+                            return;
+                          }
+
+                          const checkoutRes = await fetch("/api/payments/mercadopago/create-checkout", {
+                            method: "POST",
+                          });
+                          const checkout = (await checkoutRes.json()) as
+                            | { success: true; initPoint?: string; sandboxInitPoint?: string }
+                            | ApiError;
+                          if (!checkoutRes.ok) {
+                            throw new Error("error" in checkout ? checkout.error : "Falha ao iniciar pagamento.");
+                          }
+                          if (!("success" in checkout) || !checkout.success || !checkout.initPoint) {
+                            throw new Error("Falha ao iniciar pagamento.");
+                          }
+
+                          window.location.href = checkout.initPoint;
+                        } catch (err) {
+                          setError(err instanceof Error ? err.message : "Erro inesperado.");
+                        }
                       }}
-                      className="bg-lime-300 text-zinc-950 font-bold px-4 py-2 rounded-lg"
+                      className="bg-lime-300 text-zinc-950 font-bold px-4 py-2 rounded-lg hover:cursor-pointer"
                     >
-                      Desbloquear por R$ 7,90
+                      {typeof creditsBalance === "number" && creditsBalance > 0
+                        ? "Desbloquear agora"
+                        : "Desbloquear por R$ 7,90"}
                     </button>
                   </div>
                 </div>
@@ -483,6 +540,29 @@ export function ResumeEvaluator() {
                 className="border border-zinc-700 text-zinc-200 px-3 py-2 rounded-lg text-sm hover:cursor-pointer"
               >
                 +3 créditos (teste)
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await fetch("/api/credits/reset", {
+                      method: "POST",
+                      headers: adminToken ? { "x-admin-token": adminToken } : undefined,
+                    });
+                    const res = await fetch("/api/credits", {
+                      method: "GET",
+                      headers: adminToken ? { "x-admin-token": adminToken } : undefined,
+                    });
+                    if (!res.ok) return;
+                    const data = (await res.json()) as { success: true; balance: number };
+                    setCreditsBalance(data.balance);
+                  } catch {
+                    // ignore
+                  }
+                }}
+                className="border border-zinc-700 text-zinc-200 px-3 py-2 rounded-lg text-sm hover:cursor-pointer"
+              >
+                Zerar créditos
               </button>
               <button
                 type="button"

@@ -61,7 +61,9 @@ export default function Page() {
           </div>
         </div>
         <ResumeEvaluator />
-        <p className="text-sm text-zinc-400 flex items-center gap-2"><LockIcon size={16} /> Seus dados não são armazenados e são utilizados apenas durante a análise</p>
+        <p className="text-sm text-zinc-400 flex items-center gap-2">
+          <LockIcon size={16} /> Seus dados são utilizados apenas para gerar o relatório e deletados em até 24h.
+        </p>
       </section>
 
       <LightRays />

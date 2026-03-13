@@ -23,10 +23,15 @@ export async function POST(request: Request) {
   const timeout = setTimeout(() => abortController.abort(), UPSTREAM_TIMEOUT_MS);
 
   try {
+    const cookie = request.headers.get("cookie") || "";
+    const adminToken = request.headers.get("x-admin-token");
+
     const init: NodeRequestInit = {
       method: "POST",
       headers: {
         "content-type": contentType,
+        ...(cookie ? { cookie } : {}),
+        ...(adminToken ? { "x-admin-token": adminToken } : {}),
       },
       body: request.body,
       signal: abortController.signal,
@@ -40,11 +45,16 @@ export async function POST(request: Request) {
 
     const upstreamContentType = upstreamResponse.headers.get("content-type") || "application/json";
 
+    const responseHeaders = new Headers();
+    responseHeaders.set("content-type", upstreamContentType);
+    const setCookie = upstreamResponse.headers.get("set-cookie");
+    if (setCookie) responseHeaders.set("set-cookie", setCookie);
+    const retryAfter = upstreamResponse.headers.get("retry-after");
+    if (retryAfter) responseHeaders.set("retry-after", retryAfter);
+
     return new Response(upstreamResponse.body, {
       status: upstreamResponse.status,
-      headers: {
-        "content-type": upstreamContentType,
-      },
+      headers: responseHeaders,
     });
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") {

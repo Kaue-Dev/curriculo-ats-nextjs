@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { FolderOpenIcon, Loader2Icon, XIcon } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type ResumeEvaluationSection = {
   title: string;
@@ -17,7 +17,19 @@ type ResumeEvaluation = {
   raw?: string;
 };
 
-type ApiSuccess = { success: true; evaluation: ResumeEvaluation };
+type ApiAnalysisMeta = {
+  id: string;
+  filename: string | null;
+  createdAt: string;
+};
+
+type ApiSuccess = {
+  success: true;
+  evaluation: ResumeEvaluation;
+  analysis: ApiAnalysisMeta | null;
+  premium: { unlocked: boolean; lockedSectionsCount: number; lockedTipsCount?: number };
+  credits: { balance: number };
+};
 type ApiError = { error: string; details?: string; reqId?: string };
 
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
@@ -42,6 +54,16 @@ export function ResumeEvaluator() {
   const [error, setError] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [evaluation, setEvaluation] = useState<ResumeEvaluation | null>(null);
+  const [analysis, setAnalysis] = useState<ApiAnalysisMeta | null>(null);
+  const [premium, setPremium] = useState<{
+    unlocked: boolean;
+    lockedSectionsCount: number;
+    lockedTipsCount?: number;
+  } | null>(null);
+  const [creditsBalance, setCreditsBalance] = useState<number | null>(null);
+  const [showAdmin, setShowAdmin] = useState(false);
+  const [isAdminOpen, setIsAdminOpen] = useState(false);
+  const [adminToken, setAdminToken] = useState<string>("");
 
   const fileLabel = useMemo(() => {
     if (!file) return null;
@@ -56,6 +78,8 @@ export function ResumeEvaluator() {
     setIsLoading(true);
     setError(null);
     setEvaluation(null);
+    setAnalysis(null);
+    setPremium(null);
 
     try {
       abortRef.current?.abort();
@@ -68,6 +92,7 @@ export function ResumeEvaluator() {
       const response = await fetch("/api/resume/evaluate", {
         method: "POST",
         body: formData,
+        headers: showAdmin && adminToken ? { "x-admin-token": adminToken } : undefined,
         signal: abortController.signal,
       });
 
@@ -93,13 +118,16 @@ export function ResumeEvaluator() {
       }
 
       setEvaluation(data.evaluation);
+      setAnalysis(data.analysis);
+      setPremium(data.premium);
+      setCreditsBalance(data.credits.balance);
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;
       setError(err instanceof Error ? err.message : "Erro inesperado.");
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [adminToken, showAdmin]);
 
   const acceptFile = useCallback(
     async (nextFile: File | null | undefined) => {
@@ -119,6 +147,8 @@ export function ResumeEvaluator() {
       setFile(nextFile);
       setError(null);
       setEvaluation(null);
+      setAnalysis(null);
+      setPremium(null);
     },
     []
   );
@@ -129,6 +159,8 @@ export function ResumeEvaluator() {
     setEvaluation(null);
     setError(null);
     setIsLoading(false);
+    setAnalysis(null);
+    setPremium(null);
   }, []);
 
   const onAnalyzeClick = useCallback(async () => {
@@ -164,6 +196,59 @@ export function ResumeEvaluator() {
     },
     [acceptFile]
   );
+
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      setShowAdmin(params.get("admin") === "1");
+    } catch {
+      setShowAdmin(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!showAdmin) return;
+    try {
+      const token = localStorage.getItem("cv_admin_token") || "";
+      setAdminToken(token);
+    } catch {
+      // ignore
+    }
+  }, [showAdmin]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadLatest() {
+      try {
+        const res = await fetch("/api/resume/latest", {
+          method: "GET",
+          headers: showAdmin && adminToken ? { "x-admin-token": adminToken } : undefined,
+        });
+
+        if (res.status === 404) return;
+        const contentType = res.headers.get("content-type") || "";
+        if (!contentType.includes("application/json")) return;
+
+        const data = (await res.json()) as ApiSuccess | ApiError;
+        if (!isMounted) return;
+        if (!res.ok) return;
+        if (!("success" in data) || !data.success) return;
+
+        setEvaluation(data.evaluation);
+        setAnalysis(data.analysis);
+        setPremium(data.premium);
+        setCreditsBalance(data.credits.balance);
+      } catch {
+        // ignore
+      }
+    }
+
+    void loadLatest();
+    return () => {
+      isMounted = false;
+    };
+  }, [adminToken, showAdmin]);
 
   return (
     <div className="w-full flex flex-col gap-6">
@@ -273,6 +358,12 @@ export function ResumeEvaluator() {
         <div className="w-full max-w-200 mx-auto border border-zinc-800/70 bg-zinc-900/20 rounded-lg p-6">
           <div className="flex flex-col gap-2 mb-6">
             <p className="text-sm text-zinc-400 font-semibold tracking-wider">RESULTADO</p>
+            {analysis?.filename ? (
+              <p className="text-xs text-zinc-500 break-all">Arquivo: {analysis.filename}</p>
+            ) : null}
+            {typeof creditsBalance === "number" ? (
+              <p className="text-xs text-zinc-500">Créditos: {creditsBalance}</p>
+            ) : null}
             <div className="flex items-end gap-3">
               <p className="text-5xl font-black text-lime-300">{evaluation.overallScore}</p>
               <p className="text-zinc-400">/ 100</p>
@@ -294,8 +385,123 @@ export function ResumeEvaluator() {
                 </ul>
               </div>
             ))}
+
+            {premium && !premium.unlocked && premium.lockedSectionsCount > 0 ? (
+              <div className="relative border border-zinc-800/70 rounded-lg p-4 overflow-hidden">
+                <div className="filter blur-sm select-none pointer-events-none opacity-70">
+                  {Array.from({ length: Math.min(premium.lockedSectionsCount, 6) }).map((_, idx) => (
+                    <div key={idx} className="border border-zinc-800/70 rounded-lg p-4 mb-3 last:mb-0">
+                      <div className="flex items-center justify-between gap-4 mb-3">
+                        <p className="font-bold">Seção premium</p>
+                        <p className="text-sm text-zinc-400">-- / 100</p>
+                      </div>
+                      <ul className="list-disc pl-5 text-sm text-zinc-300 space-y-1">
+                        <li>Dica premium</li>
+                        <li>Dica premium</li>
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="absolute inset-0 flex items-center justify-center bg-zinc-950/40">
+                  <div className="text-center px-4">
+                    <p className="text-sm text-zinc-300 mb-4">
+                      Tenha acesso a mais{" "}
+                      <span className="font-bold text-zinc-50">
+                        {premium.lockedTipsCount ?? "várias"} dicas
+                      </span>{" "}
+                      por apenas <span className="font-bold text-lime-300">R$ 7,90</span>
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        alert("Em breve: desbloqueio via pagamento.");
+                      }}
+                      className="bg-lime-300 text-zinc-950 font-bold px-4 py-2 rounded-lg"
+                    >
+                      Desbloquear por R$ 7,90
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
+      ) : null}
+
+      {showAdmin ? (
+        <div className="w-fit mx-auto text-center">
+        <button
+          type="button"
+          onClick={() => setIsAdminOpen((v) => !v)}
+          className="text-xs text-zinc-500 underline underline-offset-4"
+        >
+          {isAdminOpen ? "Fechar admin" : "Admin"}
+        </button>
+
+        {isAdminOpen ? (
+          <div className="mt-3 border border-zinc-800/70 bg-zinc-900/20 rounded-lg p-4 flex flex-col gap-3">
+            <label className="text-xs text-zinc-400 font-semibold">Admin token</label>
+            <input
+              value={adminToken}
+              onChange={(e) => {
+                const next = e.target.value;
+                setAdminToken(next);
+                try {
+                  localStorage.setItem("cv_admin_token", next);
+                } catch {
+                  // ignore
+                }
+              }}
+              className="w-full bg-zinc-950/40 border border-zinc-800/70 rounded-lg px-3 py-2 text-sm"
+              placeholder="Cole o ADMIN_TOKEN aqui"
+            />
+            <div className="flex flex-col sm:flex-row gap-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await fetch("/api/credits/grant", {
+                      method: "POST",
+                      headers: {
+                        "content-type": "application/json",
+                        ...(adminToken ? { "x-admin-token": adminToken } : {}),
+                      },
+                      body: JSON.stringify({ credits: 3 }),
+                    });
+                    const res = await fetch("/api/credits", {
+                      method: "GET",
+                      headers: adminToken ? { "x-admin-token": adminToken } : undefined,
+                    });
+                    if (!res.ok) return;
+                    const data = (await res.json()) as { success: true; balance: number };
+                    setCreditsBalance(data.balance);
+                  } catch {
+                    // ignore
+                  }
+                }}
+                className="border border-zinc-700 text-zinc-200 px-3 py-2 rounded-lg text-sm hover:cursor-pointer"
+              >
+                +3 créditos (teste)
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAdminToken("");
+                  try {
+                    localStorage.removeItem("cv_admin_token");
+                  } catch {
+                    // ignore
+                  }
+                }}
+                className="border border-zinc-700 text-zinc-200 px-3 py-2 rounded-lg text-sm hover:cursor-pointer"
+              >
+                Limpar token
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </div>
       ) : null}
     </div>
   );
